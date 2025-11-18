@@ -36,7 +36,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         "--max-posts",
         type=int,
         default=100,
-        help="Limit number of job postings to process",
+        help="Limit number of job postings to process (0 for no limit)",
     )
     parser.add_argument(
         "--min-chars",

@@ -28,6 +28,7 @@ class JobExtraction:
     source: JobSource
     company: Optional[str]
     compensation: Optional[str]
+    time_zone: Optional[str]
     location_tags: List[str]
     tech_tags: List[str]
     topic_tags: List[str]

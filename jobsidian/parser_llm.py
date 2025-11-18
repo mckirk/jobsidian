@@ -1,15 +1,35 @@
 from __future__ import annotations
 
-from enum import Enum
-import json
 import time
 import os
-from dataclasses import dataclass
-from typing import List, Optional
+from pydantic import BaseModel
 
 from openrouter import OpenRouter
 
 from .common import JobExtraction, JobSource
+
+
+class LLMAnswer(BaseModel):
+    company: str | None
+    compensation: str | None
+    time_zone: str | None
+    location_tags: list[str]
+    tech_tags: list[str]
+    topic_tags: list[str]
+    fit: int
+    interest: int
+    title: str | None
+
+    def normalize(self):
+        self.location_tags = _normalize_tags(self.location_tags)
+        self.tech_tags = _normalize_tags(self.tech_tags)
+        self.topic_tags = _normalize_tags(self.topic_tags)
+        self.fit = _clamp_int(self.fit, 1, 5, 1)
+        self.interest = _clamp_int(self.interest, 1, 5, 1)
+        self.company = _norm_str(self.company)
+        self.compensation = _norm_str(self.compensation)
+        self.time_zone = _norm_str(self.time_zone)
+        self.title = _norm_str(self.title)
 
 
 class LLMParser:
@@ -31,7 +51,7 @@ class LLMParser:
 
         system = (
             "You are an assistant that extracts structured data from job postings and evaluates fit and interest. "
-            "Respond ONLY with a compact JSON object matching the required schema."
+            "Respond ONLY with a compact JSON object matching the required schema. Keep tag tokens consistent with the provided prior tag inventory; reuse existing tokens when applicable and avoid near-duplicate variants."
         )
 
         user = (
@@ -39,9 +59,10 @@ class LLMParser:
             "Return a JSON object with keys: \n"
             "- company: string | null (verbatim as in the text)\n"
             "- compensation: string | null (free text as seen)\n"
+            "- time_zone: string | null (if specified, can be a range)\n"
             "- location_tags: array of strings (lowercase simple tags, e.g., ['berlin','hybrid'] or ['nyc','sf'])\n"
             "- tech_tags: array of strings (lowercase simple tags for relevant technologies, e.g., ['python','aws','docker'])\n"
-            "- topic_tags: array of strings (lowercase simple tags for relevant topics/fields, e.g., ['ml','web','mobile'])\n"
+            "- topic_tags: array of strings (lowercase simple tags for relevant topics/fields, e.g., ['ai','web3','formal-methods'])\n"
             "- fit: integer 1-5 (higher means better fit)\n"
             "- interest: integer 1-5 (higher means more interesting to the candidate)\n"
             "- title: string | null (job title if identifiable; comma-separated list if multiple jobs included)\n\n"
@@ -67,40 +88,26 @@ class LLMParser:
         if not isinstance(content, str):
             raise ValueError("LLM response content is not a string")
 
-        data = json.loads(content)
+        data = LLMAnswer.model_validate_json(content)
+        data.normalize()
 
-        company = _norm_str(data.get("company"))
-        compensation = _norm_str(data.get("compensation"))
-        title = _norm_str(data.get("title"))
-        fit = _clamp_int(data.get("fit"), 1, 5, default=3)
-        interest = _clamp_int(data.get("interest"), 1, 5, default=3)
-        loc_tags = data.get("location_tags") or []
-        if not isinstance(loc_tags, list):
-            loc_tags = []
-        loc_tags = _normalize_tags(loc_tags)
-        tech_tags = data.get("tech_tags") or []
-        if not isinstance(tech_tags, list):
-            tech_tags = []
-        tech_tags = _normalize_tags(tech_tags)
-        topic_tags = data.get("topic_tags") or []
-        if not isinstance(topic_tags, list):
-            topic_tags = []
-        topic_tags = _normalize_tags(topic_tags)
-
-        return JobExtraction(
-            company=company,
-            compensation=compensation,
-            location_tags=loc_tags,
-            tech_tags=tech_tags,
-            topic_tags=topic_tags,
-            fit=fit,
-            interest=interest,
-            title=title,
+        extraction = JobExtraction(
+            company=data.company,
+            compensation=data.compensation,
+            time_zone=data.time_zone,
+            location_tags=data.location_tags,
+            tech_tags=data.tech_tags,
+            topic_tags=data.topic_tags,
+            fit=data.fit,
+            interest=data.interest,
+            title=data.title,
             source=job_source,
         )
 
+        return extraction
 
-def _normalize_tags(tags: List[str]) -> List[str]:
+
+def _normalize_tags(tags: list[str]) -> list[str]:
     out = []
     for t in tags:
         if not isinstance(t, str):
@@ -121,7 +128,7 @@ def _clamp_int(val, lo: int, hi: int, default: int) -> int:
     return max(lo, min(hi, n))
 
 
-def _norm_str(val) -> Optional[str]:
+def _norm_str(val) -> str | None:
     if val is None:
         return None
     s = str(val).strip()

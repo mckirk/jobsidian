@@ -17,6 +17,7 @@ class ObsidianFrontMatter(BaseModel):
     company: str | None
     title: str | None
     compensation: str | None
+    time_zone: str | None
     location: list[str]
     tech: list[str]
     topics: list[str]
@@ -43,6 +44,7 @@ def read_job_notes(input_dir: Path) -> list[JobExtraction]:
             company=fm.company,
             title=fm.title,
             compensation=fm.compensation,
+            time_zone=fm.time_zone,
             location_tags=fm.location,
             tech_tags=fm.tech,
             topic_tags=fm.topics,
@@ -75,6 +77,7 @@ def write_job_note(
         created=now_iso,
         modified=now_iso,
         compensation=extraction.compensation,
+        time_zone=extraction.time_zone,
         location=extraction.location_tags,
         tech=extraction.tech_tags,
         topics=extraction.topic_tags,
