@@ -25,6 +25,7 @@ class ObsidianFrontMatter(BaseModel):
     interest: int
     source_url: str
     source_id: str  # e.g., "hn_comment:123456"
+    source_posted_at: str | None  # ISO format datetime
 
 
 def read_job_notes(input_dir: Path) -> list[JobExtraction]:
@@ -40,7 +41,9 @@ def read_job_notes(input_dir: Path) -> list[JobExtraction]:
             continue
 
         extraction = JobExtraction(
-            source=JobSource.from_id(fm.source_id, url=fm.source_url),
+            source=JobSource.from_id(
+                fm.source_id, url=fm.source_url, posted_at=fm.source_posted_at
+            ),
             company=fm.company,
             title=fm.title,
             compensation=fm.compensation,
@@ -85,6 +88,7 @@ def write_job_note(
         interest=extraction.interest,
         source_url=extraction.source.url,
         source_id=extraction.source.to_id(),
+        source_posted_at=extraction.source.posted_at,
     )
 
     yaml_front = to_yaml_str(fm).strip()

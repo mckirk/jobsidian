@@ -12,15 +12,16 @@ class JobSource:
     kind: JobSourceKind
     url: str
     identifier: str  # e.g., comment ID
+    posted_at: str | None  # ISO format datetime
 
     def to_id(self) -> str:
         return f"{self.kind.value}:{self.identifier}"
 
     @classmethod
-    def from_id(cls, id_str: str, url: str) -> "JobSource":
+    def from_id(cls, id_str: str, url: str, posted_at: str | None) -> "JobSource":
         kind_str, identifier = id_str.split(":", 1)
         kind = JobSourceKind(kind_str)
-        return cls(kind=kind, url=url, identifier=identifier)
+        return cls(kind=kind, url=url, identifier=identifier, posted_at=posted_at)
 
 
 @dataclass

@@ -14,6 +14,7 @@ import markdownify
 class HNComment:
     comment_id: str
     content: str  # as Markdown
+    posted_at: str  # ISO format datetime
 
 
 def fetch_hn_post_comments(url: str) -> List[HNComment]:
@@ -42,6 +43,14 @@ def fetch_hn_post_comments(url: str) -> List[HNComment]:
             logging.warning("Skipping comment without ID")
             continue
 
+        # Extract posted time from '<span class="age" title="2025-11-06T21:32:06 1762464726">'
+        age_el = comtr.select_one("span.age")
+        posted_at = ""
+        if age_el:
+            title_attr = age_el.get("title")
+            if title_attr and isinstance(title_attr, str):
+                posted_at = title_attr.split(" ")[0]  # ISO datetime part
+
         body_el = comtr.select_one("div.commtext")
         if not body_el:
             logging.debug(f"Comment {comment_id} missing body element; skipping.")
@@ -50,7 +59,9 @@ def fetch_hn_post_comments(url: str) -> List[HNComment]:
         # Convert HTML to markdown
         body_html = str(body_el)
         body_md = markdownify.markdownify(body_html, heading_style="ATX")
-        comments.append(HNComment(comment_id=comment_id, content=body_md))
+        comments.append(
+            HNComment(comment_id=comment_id, content=body_md, posted_at=posted_at)
+        )
 
     return comments
 

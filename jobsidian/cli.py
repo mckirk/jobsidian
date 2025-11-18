@@ -108,7 +108,10 @@ def main(argv: List[str] | None = None) -> int:
     errors = 0
     for idx, jc in enumerate(job_comments, start=1):
         source = JobSource(
-            JobSourceKind.HN_COMMENT, url=args.url, identifier=jc.comment_id
+            JobSourceKind.HN_COMMENT,
+            url=args.url,
+            identifier=jc.comment_id,
+            posted_at=jc.posted_at,
         )
 
         if source.to_id() in existing_ids:
