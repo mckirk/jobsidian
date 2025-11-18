@@ -65,10 +65,14 @@ CLI Options
 | `--min-chars` | Minimum comment length to treat as job | `400` |
 | `--dry-run` | Skip writing files, print summary lines | off |
 | `--rate-limit` | Sleep seconds between LLM calls | `0.0` |
+| `--concurrency` | Number of parallel LLM requests | `5` |
 
 Convenience: `args.txt`
 -----------------------
-If you create an `args.txt` file in the project root, Jobsidian will read arguments from it when invoked without explicit CLI parameters. Example contents:
+If you create an `args.txt` file in the project root, Jobsidian will read arguments from it.
+**Note:** If `args.txt` exists, it currently takes precedence over command-line arguments.
+
+Example contents of `args.txt`:
 
 ```
 --cv ./cv.txt --url https://news.ycombinator.com/item?id=XXXXXXX --out ./obsidian-jobs --max-posts 50
@@ -86,6 +90,7 @@ status: idea
 company: Acme Robotics
 title: Senior Python Engineer
 compensation: Competitive + equity
+time_zone: US / Remote
 location: ["remote", "eu"]
 tech: ["python", "aws", "docker"]
 topics: ["ml", "infrastructure"]
@@ -93,6 +98,7 @@ fit: 4
 interest: 5
 source_url: https://news.ycombinator.com/item?id=XXXXXXX
 source_id: hn_comment:123456
+source_posted_at: 2025-11-06T21:32:06
 ---
 ```
 

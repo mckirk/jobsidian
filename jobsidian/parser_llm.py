@@ -5,6 +5,7 @@ import os
 from pydantic import BaseModel
 
 from openrouter import OpenRouter
+from openrouter.components import ResponseFormatJSONSchema, JSONSchemaConfig
 
 from .common import JobExtraction, JobSource
 
@@ -43,7 +44,7 @@ class LLMParser:
             api_key=os.getenv("OPENROUTER_API_KEY"),
         )
 
-    def extract(
+    async def extract(
         self, cv_text: str, job_text: str, job_source: JobSource
     ) -> JobExtraction:
         if self.rate_limit_seconds > 0:
@@ -74,14 +75,18 @@ class LLMParser:
             f"JOB POSTING:\n---\n{job_text}\n---\n"
         )
 
-        resp = self.client.chat.send(
+        resp = await self.client.chat.send_async(
             model=self.model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
             temperature=self.temperature,
-            response_format={"type": "json_object"},
+            response_format=ResponseFormatJSONSchema(
+                json_schema=JSONSchemaConfig(
+                    name="LLMAnswer", schema_=LLMAnswer.model_json_schema()
+                )
+            ),
         )
         content = resp.choices[0].message.content
 

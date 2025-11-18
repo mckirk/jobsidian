@@ -93,12 +93,7 @@ def write_job_note(
 
     yaml_front = to_yaml_str(fm).strip()
 
-    body = (
-        f"---\n{yaml_front}\n---\n\n"
-        f"# {extraction.company or 'Unknown Company'}\n\n"
-        f"Original Posting:\n\n"
-        f"````\n{job_text}\n````\n"
-    )
+    body = f"---\n{yaml_front}\n---\n{job_text}\n"
 
     target.write_text(body, encoding="utf-8")
     return target

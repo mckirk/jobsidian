@@ -1,8 +1,8 @@
 import argparse
+import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 from .common import JobExtraction, JobSource, JobSourceKind
 from .hn_fetcher import fetch_hn_post_comments
@@ -10,7 +10,7 @@ from .parser_llm import LLMParser
 from .obsidian import read_job_notes, write_job_note
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate Obsidian notes from HN 'Who is Hiring' using a CV and an LLM"
     )
@@ -55,10 +55,84 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         default=0.0,
         help="Seconds to sleep between LLM calls (0 for none)",
     )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=5,
+        help="Number of parallel LLM requests (default 5)",
+    )
     return parser.parse_args(argv)
 
 
-def main(argv: List[str] | None = None) -> int:
+async def process_single_job(
+    idx: int,
+    jc,
+    args,
+    cv_text: str,
+    existing_ids: set,
+    parser: LLMParser,
+    out_dir: Path,
+    semaphore: asyncio.Semaphore,
+) -> tuple[bool, bool, bool]:  # processed, skipped, error
+    source = JobSource(
+        JobSourceKind.HN_COMMENT,
+        url=args.url,
+        identifier=jc.comment_id,
+        posted_at=jc.posted_at,
+    )
+
+    if source.to_id() in existing_ids:
+        print(
+            f"[{idx}] Skipping already existing job: {source.to_id()}",
+            file=sys.stderr,
+        )
+        return False, True, False
+
+    async with semaphore:
+        try:
+            extraction: JobExtraction = await parser.extract(
+                cv_text=cv_text, job_text=jc.content, job_source=source
+            )
+        except Exception as e:
+            print(f"[{idx}] LLM extraction failed: {e}", file=sys.stderr)
+            return False, False, True
+
+    if args.dry_run:
+        print(
+            f"[{idx}] {extraction.company or 'Unknown Company'} | fit={extraction.fit} interest={extraction.interest} locations={extraction.location_tags} comp={extraction.compensation}",
+            file=sys.stderr,
+        )
+    else:
+        write_job_note(
+            output_dir=out_dir,
+            extraction=extraction,
+            job_text=jc.content,
+        )
+    return True, False, False
+
+
+async def run_async_processing(
+    job_comments, args, cv_text, existing_ids, parser, out_dir
+) -> tuple[int, int, int]:
+    semaphore = asyncio.Semaphore(args.concurrency)
+    tasks = []
+    for idx, jc in enumerate(job_comments, start=1):
+        tasks.append(
+            process_single_job(
+                idx, jc, args, cv_text, existing_ids, parser, out_dir, semaphore
+            )
+        )
+
+    results = await asyncio.gather(*tasks)
+
+    processed = sum(1 for r in results if r[0])
+    skipped = sum(1 for r in results if r[1])
+    errors = sum(1 for r in results if r[2])
+
+    return processed, skipped, errors
+
+
+def main(argv: list[str] | None = None) -> int:
     # Load from args.txt, if none given otherwise
     if not argv:
         args_file = Path("args.txt")
@@ -103,46 +177,9 @@ def main(argv: List[str] | None = None) -> int:
         rate_limit_seconds=args.rate_limit,
     )
 
-    processed = 0
-    skipped = 0
-    errors = 0
-    for idx, jc in enumerate(job_comments, start=1):
-        source = JobSource(
-            JobSourceKind.HN_COMMENT,
-            url=args.url,
-            identifier=jc.comment_id,
-            posted_at=jc.posted_at,
-        )
-
-        if source.to_id() in existing_ids:
-            print(
-                f"[{idx}] Skipping already existing job: {source.to_id()}",
-                file=sys.stderr,
-            )
-            skipped += 1
-            continue
-
-        try:
-            extraction: JobExtraction = parser.extract(
-                cv_text=cv_text, job_text=jc.content, job_source=source
-            )
-        except Exception as e:
-            errors += 1
-            print(f"[{idx}] LLM extraction failed: {e}", file=sys.stderr)
-            continue
-
-        if args.dry_run:
-            print(
-                f"[{idx}] {extraction.company or 'Unknown Company'} | fit={extraction.fit} interest={extraction.interest} locations={extraction.location_tags} comp={extraction.compensation}",
-                file=sys.stderr,
-            )
-        else:
-            write_job_note(
-                output_dir=out_dir,
-                extraction=extraction,
-                job_text=jc.content,
-            )
-        processed += 1
+    processed, skipped, errors = asyncio.run(
+        run_async_processing(job_comments, args, cv_text, existing_ids, parser, out_dir)
+    )
 
     print(
         f"Done. Processed={processed} Skipped={skipped} Errors={errors}. Output: {out_dir}",
