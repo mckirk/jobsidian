@@ -47,7 +47,7 @@ class LLMParser:
             "- title: string | null (job title if identifiable; comma-separated list if multiple jobs included)\n\n"
             "Rules:\n"
             "- Use only integers for fit and interest.\n"
-            "- If uncertain, infer conservatively; never return non-integers for scores.\n"
+            "- If uncertain, infer conservatively and return a lower bound; high values in fit and interest should remain rare to provide a clear signal.\n"
             "- location_tags should be short, normalized tokens: lowercase, no punctuation; split multiple locations separately.\n"
             f"CV:\n---\n{cv_text}\n---\n\n"
             f"JOB POSTING:\n---\n{job_text}\n---\n"
